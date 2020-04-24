@@ -75,7 +75,7 @@ We also need to setup CORS. In `config/initializers/cors.rb` file, the '*' (wild
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
     # origins '*' won't work!
-    origins 'localhost:3001'
+    origins 'localhost:3001' # Make sure to change this when you deploy!
 
     resource '*',
       headers: :any,
@@ -104,6 +104,7 @@ Let's make sure our User class is set up to use BCrypt and has some validations:
 
 
 ```rb
+# app/models/user.rb
 class User < ApplicationRecord
   has_secure_password
 
@@ -114,6 +115,7 @@ end
 Let's also configure the serializer so it only sends the username:
 
 ```rb
+# app/serializers/user_serializer.rb
 class UserSerializer < ActiveModel::Serializer
   attributes :username
 end
@@ -138,6 +140,7 @@ end
 Now for some controller setup. First, let's setup our ApplicationController to handle some authorization logic:
 
 ```rb
+# app/controllers/application_controller.rb
 class ApplicationController < ActionController::API
   include ActionController::Cookies
   
@@ -165,6 +168,7 @@ end
 Then let's set up our UsersController to enable our auth actions: 
 
 ```rb
+# app/controllers/api/v1/user_controller.rb
 class Api::V1::UsersController < ApplicationController
   # authorized (from ApplicationController) will run before EVERY action except login and signup
   skip_before_action :authorized, only: [:login, :signup]
@@ -220,12 +224,45 @@ With our API set up, let's have a look at our frontend.
 We're still going to be communicating between our frontend and backend using `fetch`, but now in addition to sending what we've typically been (headers, method, body), we also need to make fetch include our cookies as part of all requests. To do this, all we need to do is use the `credentials: "include"` option in our fetch request:
 
 ```js
-fetch("http://localhost:3000/autologin/", {
+fetch("http://localhost:3000/api/v1/autologin/", {
   credentials: "include"
 })
 ```
 
 This will ensure that cookies are encluded as part of the `fetch` request for cross-origin requests - [MDN Request.credentials](https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials). Since our frontend and backend are on separate origins, this option is necessary for all requests that need our session cookie.
+
+To test our sessions, try making a signup request in your frontend (you can do this from the browser console, but make sure you're on `localhost:3001`):
+
+```js
+fetch("http://localhost:3000/api/v1/signup", {
+  method: "POST",
+  credentials: "include",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({ username: "test_user", password: "123" })
+})
+```
+
+In the network tab, the response should look something like this:
+
+![signup response](screenshots/signup.png)
+
+If the Access-Control headers look different, check your CORS config file on the server. Also, make sure you have `credentials: "include"` in your fetch options.
+
+After signing up, try using the autologin route to check if your requests are authenticated:
+
+```js
+fetch("http://localhost:3000/api/v1/autologin/", {
+  credentials: "include"
+})
+```
+
+In the network tab, the request should look something like this:
+
+![autologin response](screenshots/autologin.png)
+
+Check that the cookie is being sent as part of the request headers; if not, double-check that **all** your fetch requests have `credentials: "include"`.
 
 Play around with the sample app and drop some `byebug`s in your backend when the fetches come through to get a sense of how the auth flow works! Pay close attention in particular to the actions in the ApplicationController.
 
