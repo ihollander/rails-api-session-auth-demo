@@ -45,6 +45,7 @@ Then, run:
 
 ```sh
 $ bundle add active_model_serializers 
+$ bundle install
 ```
 
 ### Config 
@@ -69,7 +70,7 @@ end
 
 ```
 
-We also need to setup CORS. In `config/initializers/cors.rb` file, the '*' (wildcard) origin isn't an option if you want to send cookies in a CORS request - we need to specify the origins we're allowing. We also need to include `credentials: true` here to set the `Access-Control-Allow-Credentials` header to `true`.
+We also need to setup CORS. In `config/initializers/cors.rb` file, the `*` (wildcard) origin isn't an option if you want to send cookies in a CORS request - we need to specify the origins we're allowing. We also need to include `credentials: true` here to set the `Access-Control-Allow-Credentials` header to `true`.
 
 ```rb
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
@@ -149,9 +150,7 @@ class ApplicationController < ActionController::API
   private 
   
   def current_user
-    if session[:user_id]
-      @current_user = User.find_by(id: session[:user_id])
-    end
+    @current_user = User.find_by(id: session[:user_id])
   end
   
   def logged_in?
@@ -246,7 +245,7 @@ fetch("http://localhost:3000/api/v1/signup", {
 
 In the network tab, the response should look something like this:
 
-![signup response](screenshots/signup.png)
+![signup response](screenshots/signup.png?raw=true)
 
 If the Access-Control headers look different, check your CORS config file on the server. Also, make sure you have `credentials: "include"` in your fetch options.
 
@@ -260,7 +259,7 @@ fetch("http://localhost:3000/api/v1/autologin/", {
 
 In the network tab, the request should look something like this:
 
-![autologin response](screenshots/autologin.png)
+![autologin response](screenshots/autologin.png?raw=true)
 
 Check that the cookie is being sent as part of the request headers; if not, double-check that **all** your fetch requests have `credentials: "include"`.
 
