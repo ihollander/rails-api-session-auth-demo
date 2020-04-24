@@ -3,12 +3,13 @@
 Today we're going to take a look at using Rails sessions as a way of authenticating requests to our API from a separate frontend service. There are many different auth strategies out there, and they all come with some tradeoffs; this approach will hopefully feel similar to your experience learning Auth in Rails in Mod 2.
 
 The motivation: 
+
 - Rails has a great mechanism for session-based auth that's built-in and battle-tested
 - HTTPOnly cookies are secure from cross-site scripting (XSS) attacks, while [localstorage is not](https://stackoverflow.com/questions/35291573/csrf-protection-with-json-web-tokens/35347022#35347022)
 
 **Disclaimer 1**: This readme only covers the basics and there are still some additional security concerns to be aware of with this approach. Consider implementing [CSRF tokens](https://pragmaticstudio.com/tutorials/rails-session-cookies-for-api-authentication) and [enabling secure cookies](https://api.rubyonrails.org/classes/ActionDispatch/Session/CookieStore.html) if you deploy your app to a secure domain.
 
-**Disclaimer 2**: Using this strategy means your API will only be accessible from browser-based clients, since we're relying on cookies as the authentication mechanism. That means if you're planning on making a React Native client or other mobile frontend this won't work. It also will make testing your API using Postman more challenging. For an alternate auth approach using JWT tokens, have a look at [this readme](https://github.com/learn-co-curriculum/jwt-auth-rails). You could also consider using JWT tokens and storing them in cookies, which would give you the added protection of using HTTPOnly cookie storage in browsers - have a look at this [terrific blog](https://www.thegreatcodeadventure.com/jwt-storage-in-rails-the-right-way/) for more details on that.
+**Disclaimer 2**: Using this strategy means your API will only be accessible from browser-based clients, since we're relying on cookies as the authentication mechanism. That means if you're planning on making a React Native client or other mobile frontend, this strategy won't work. It also will make testing your API using Postman more challenging. For an alternate auth approach using JWT tokens, have a look at [this readme](https://github.com/learn-co-curriculum/jwt-auth-rails). You could also consider using JWT tokens and storing them in cookies, which would give you the added protection of using HTTPOnly cookie storage in browsers - have a look at this [terrific blog](https://www.thegreatcodeadventure.com/jwt-storage-in-rails-the-right-way/) for more details on that.
 
 Finished code for this project is in `session-auth-api` (Rails) and `session-auth-client` (React).
 
