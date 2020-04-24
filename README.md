@@ -1,8 +1,24 @@
-# API Auth with Cookies
+# Session-based Rails API Auth
+
+Today we're going to take a look at using Rails sessions as a way of authenticating requests to our API from a separate frontend service. There are many different auth strategies out there, and they all come with some tradeoffs; this approach will hopefully feel similar to your experience learning Auth in Rails in Mod 2.
+
+The motivation: 
+- Rails has a great mechanism for session-based auth that's built-in and battle-tested
+- HTTPOnly cookies are secure from cross-site scripting (XSS) attacks, while [localstorage is not](https://stackoverflow.com/questions/35291573/csrf-protection-with-json-web-tokens/35347022#35347022)
+
+**Disclaimer 1**: This readme only covers the basics and there are still some additional security concerns to be aware of with this approach. Consider implementing [CSRF tokens](https://pragmaticstudio.com/tutorials/rails-session-cookies-for-api-authentication) and [enabling secure cookies](https://api.rubyonrails.org/classes/ActionDispatch/Session/CookieStore.html) if you deploy your app to a secure domain.
+
+**Disclaimer 2**: Using this strategy means your API will only be accessible from browser-based clients, since we're relying on cookies as the authentication mechanism. That means if you're planning on making a React Native client or other mobile frontend this won't work. It also will make testing your API using Postman more challenging. For an alternate auth approach using JWT tokens, have a look at [this readme](https://github.com/learn-co-curriculum/jwt-auth-rails). You could also consider using JWT tokens and storing them in cookies, which would give you the added protection of using HTTPOnly cookie storage in browsers - have a look at this [terrific blog](https://www.thegreatcodeadventure.com/jwt-storage-in-rails-the-right-way/) for more details on that.
 
 Finished code for this project is in `session-auth-api` (Rails) and `session-auth-client` (React).
 
-To get up and running, from `session-auth-api`, run:
+If you want to code along, create a new Rails app:
+
+```sh
+$ rails new project-name-backend --api --database=postgresql
+```
+
+If you'd rather use the pre-built app, `cd` into `session-auth-api` and run:
 
 ```sh
 $ bundle
@@ -10,7 +26,7 @@ $ rails db:migrate
 $ rails s
 ```
 
-And from `session-auth-client`:
+There's also a pre-build React client app - to get that running, `cd` into `session-auth-client` and run:
 
 ```sh
 $ npm install
@@ -19,7 +35,20 @@ $ npm start
 
 ## Rails
 
-Let's get the backend setup done first. We'll need to configure a couple of things, since the default configuration for Rails with the `--api` flag doesn't enable cookies or sessions.
+### Gems
+Time to get our app up and running! Let's take care of setting up our Gemfile for this project with all the necessary dependencies. 
+
+First, uncomment the `rack-cors` and `bcrypt` gems.
+
+Then, run:
+
+```sh
+$ bundle add active_model_serializers 
+```
+
+### Config 
+
+We'll need to configure a couple of things right off the bat, since the default configuration for Rails with the `--api` flag doesn't enable cookies or sessions.
 
 First, we need to add in middleware for cookies and sessions in our config:
 
@@ -39,15 +68,7 @@ end
 
 ```
 
-We'll also have to setup your controllers to send cookies, this can be done by updating our ApplicationController:
-
-```rb
-class ApplicationController < ActionController::API
-  include ActionController::Cookies
-end
-```
-
-Lastly, we still need to setup CORS. First we'll need to uncomment the `rack-cors` gem in our Gemfile. Then in our `config/initializers/cors.rb` file, we can't use wildcard - we need to specify the origins we're allowing.We also need to include `credentials: true` here:
+We also need to setup CORS. In `config/initializers/cors.rb` file, the '*' (wildcard) origin isn't an option if you want to send cookies in a CORS request - we need to specify the origins we're allowing. We also need to include `credentials: true` here to set the `Access-Control-Allow-Credentials` header to `true`.
 
 ```rb
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
@@ -63,17 +84,16 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
 end
 ```
 
-With that configuration done, let's make a model and a few resources to test our session auth.
+Finally, we also have to setup our controllers to send cookies.
 
-First, we need to uncomment the `bcrypt` gem in our Gemfile.
-
-We'll also use `active_model_serializers`:
-
-```sh
-$ bundle add active_model_serializers
+```rb
+class ApplicationController < ActionController::API
+  include ActionController::Cookies
+end
 ```
 
-Then, we'll create a User model:
+### Authenticating
+With that configuration done, let's make a User model and a few resources to test our session auth:
 
 ```sh
 $ rails g resource User username password_digest
@@ -86,7 +106,7 @@ Let's make sure our User class is set up to use BCrypt and has some validations:
 class User < ApplicationRecord
   has_secure_password
 
-  validates :username, presence: true, uniqueness: true
+  validates :username, presence: true, uniqueness: { case_sensitive: false }
 end
 ```
 
@@ -103,10 +123,14 @@ Then let's configure some routes for authentication:
 ```rb
 # config/routes.rb
 Rails.application.routes.draw do
-  post "/signup", to: "users#signup"
-  post "/login", to: "users#login"
-  post "/logout", to: "users#logout"
-  get "/autologin", to: "users#autologin"
+  namespace :api do
+    namespace :v1 do
+      post "/signup", to: "users#signup"
+      post "/login", to: "users#login"
+      post "/logout", to: "users#logout"
+      get "/autologin", to: "users#autologin"
+    end
+  end
 end
 ```
 
@@ -122,7 +146,7 @@ class ApplicationController < ActionController::API
   
   def current_user
     if session[:user_id]
-      @user = User.find_by(id: session[:user_id])
+      @current_user = User.find_by(id: session[:user_id])
     end
   end
   
@@ -137,50 +161,58 @@ class ApplicationController < ActionController::API
 end
 ```
 
-Then let's set up our UsersController to enable our login/logout actions: 
+Then let's set up our UsersController to enable our auth actions: 
 
 ```rb
-class UsersController < ApplicationController
-  skip_before_action :authorized, only: [:login, :signup, :autologin]
+class Api::V1::UsersController < ApplicationController
+  # authorized (from ApplicationController) will run before EVERY action except login and signup
+  skip_before_action :authorized, only: [:login, :signup]
 
   def login
+    # login looks for an existing user by their username
     user = User.find_by(username: params[:username])
 
+    # it uses the authenticate method from BCrypt to check their hashed password
     if user && user.authenticate(params[:password])
+      # if they are authenticated, set the user_id in the session cookie
       session[:user_id] = user.id
       render json: user
     else
-      render json: { errors: "Invalid username or password" }, status: :bad_request
+      # otherwise, they're not authenticated
+      render json: { errors: "Invalid username or password" }, status: :unauthorized
     end
   end
 
+  # signup creates a new user
   def signup
     user = User.create(username: params[:username], password: params[:password])
 
     if user.valid?
+      # if the user is created successfully, set the user_id in the session cookie
       session[:user_id] = user.id
-      render json: user
+      render json: user, status: :created
     else
+      # otherwise, let them try signing up again
       render json: { errors: user.errors.full_messages }, status: :bad_request
     end
   end
 
+  # this action can be used to authenticate a user when the client app first loads (in componentDidMount in App, for example)
+  # make sure the authenticate before_action runs before this (since we need the @current_user instance variable set)
   def autologin
-    if @user
-      render json: @user
-    else
-      render json: { message: "Please sign in!" }
-    end
+    render json: @current_user
   end
 
   def logout
     session.delete(:user_id)
 
-    render status: :ok
+    render json: { message: "Logged out" }
   end
 
 end
 ```
+
+With our API set up, let's have a look at our frontend.
 
 ## React
 
@@ -196,8 +228,9 @@ This will ensure that cookies are encluded as part of the `fetch` request for cr
 
 Play around with the sample app and drop some `byebug`s in your backend when the fetches come through to get a sense of how the auth flow works! Pay close attention in particular to the actions in the ApplicationController.
 
-
 ## Resources
 
 - [Rails API Auth with Session Cookies](https://pragmaticstudio.com/tutorials/rails-session-cookies-for-api-authentication)
   - this also shows how to enable CSRF protection for added security
+- [JWT Storage in Rails + React](https://www.thegreatcodeadventure.com/jwt-storage-in-rails-the-right-way/)
+  - this advocates for using JWT tokens instead of Rails sessions as an auth mechanism, but it's a useful resource for seeing how to use HTTPOnly cookies

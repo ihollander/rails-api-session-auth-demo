@@ -1,4 +1,4 @@
-class UsersController < ApplicationController
+class Api::V1::UsersController < ApplicationController
   skip_before_action :authorized, only: [:login, :signup]
 
   def login
@@ -8,7 +8,7 @@ class UsersController < ApplicationController
       session[:user_id] = user.id
       render json: user
     else
-      render json: { errors: "Invalid username or password" }, status: :bad_request
+      render json: { errors: "Invalid username or password" }, status: :unauthorized
     end
   end
 
@@ -17,16 +17,14 @@ class UsersController < ApplicationController
 
     if user.valid?
       session[:user_id] = user.id
-      render json: user
+      render json: user, status: :created
     else
       render json: { errors: user.errors.full_messages }, status: :bad_request
     end
   end
 
   def autologin
-    if @user
-      render json: @user
-    end
+    render json: @current_user
   end
 
   def logout

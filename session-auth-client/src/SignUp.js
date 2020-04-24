@@ -12,7 +12,7 @@ class SignUp extends React.Component {
 
   handleSignup = e => {
     e.preventDefault()
-    fetch("http://localhost:3000/signup", {
+    fetch("http://localhost:3000/api/v1/signup", {
       method: "POST",
       credentials: "include",
       headers: {

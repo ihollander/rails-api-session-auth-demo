@@ -12,7 +12,7 @@ class App extends React.Component {
   // make a fetch to check if the user is already logged in 
   // (ie, do they have a valid session in their cookies)
   componentDidMount() {
-    fetch("http://localhost:3000/autologin", {
+    fetch("http://localhost:3000/api/v1/autologin", {
       credentials: "include"
     })
       .then(r => {
@@ -35,7 +35,7 @@ class App extends React.Component {
   }
 
   handleLogout = () => {
-    fetch("http://localhost:3000/logout", {
+    fetch("http://localhost:3000/api/v1/logout", {
       method: "POST",
       credentials: "include"
     })
